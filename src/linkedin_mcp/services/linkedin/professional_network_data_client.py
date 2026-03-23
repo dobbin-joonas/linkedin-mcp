@@ -196,8 +196,8 @@ class ProfessionalNetworkDataClient:
         try:
             data = await self._make_request(
                 "GET",
-                "/person",
-                params={"link": linkedin_url},
+                "/profile",
+                params={"url": linkedin_url},
             )
 
             if data and data.get("data"):
@@ -251,31 +251,21 @@ class ProfessionalNetworkDataClient:
         # Build search parameters
         search_params: dict[str, Any] = {}
         if query:
-            search_params["keywords"] = query
+            search_params["keyword"] = query
         if first_name:
             search_params["first_name"] = first_name
         if last_name:
             search_params["last_name"] = last_name
         if title_keywords:
-            search_params["title_keywords"] = title_keywords
+            search_params["title"] = title_keywords[0] if title_keywords else None
         if company_names:
-            search_params["current_company_names"] = company_names
-        if company_ids:
-            search_params["current_company_ids"] = company_ids
-        if geo_codes:
-            search_params["geo_codes"] = geo_codes
-        if industries:
-            search_params["industry_codes"] = industries
-        if seniority_levels:
-            search_params["seniority_levels"] = seniority_levels
-        if functions:
-            search_params["functions"] = functions
+            search_params["company"] = company_names[0] if company_names else None
 
         try:
             data = await self._make_request(
-                "POST",
-                "/search-people",
-                json_data=search_params,
+                "GET",
+                "/search/people",
+                params=search_params,
             )
 
             if data:
@@ -414,8 +404,8 @@ class ProfessionalNetworkDataClient:
         try:
             data = await self._make_request(
                 "GET",
-                "/person-network",
-                params={"link": linkedin_url},
+                "/profile/network",
+                params={"url": linkedin_url},
             )
 
             if data and data.get("data"):
@@ -469,7 +459,7 @@ class ProfessionalNetworkDataClient:
             data = await self._make_request(
                 "GET",
                 "/company",
-                params={"link": linkedin_url},
+                params={"url": linkedin_url},
             )
 
             if data and data.get("data"):
@@ -506,19 +496,13 @@ class ProfessionalNetworkDataClient:
         Returns:
             List of company dicts
         """
-        search_params: dict[str, Any] = {"query": query}
-        if industries:
-            search_params["industry_codes"] = industries
-        if company_sizes:
-            search_params["company_headcounts"] = company_sizes
-        if locations:
-            search_params["geo_codes"] = locations
+        search_params: dict[str, Any] = {"keyword": query}
 
         try:
             data = await self._make_request(
-                "POST",
-                "/search-companies",
-                json_data=search_params,
+                "GET",
+                "/search/companies",
+                params=search_params,
             )
 
             if data:
@@ -726,8 +710,8 @@ class ProfessionalNetworkDataClient:
         try:
             data = await self._make_request(
                 "GET",
-                "/person-posts",
-                params={"link": linkedin_url, "type": post_type},
+                "/profile/posts",
+                params={"url": linkedin_url},
             )
 
             if data and data.get("data"):
@@ -772,8 +756,8 @@ class ProfessionalNetworkDataClient:
         try:
             data = await self._make_request(
                 "GET",
-                "/company-posts",
-                params={"link": linkedin_url, "sort_by": sort_by},
+                "/company/posts",
+                params={"url": linkedin_url},
             )
 
             if data and data.get("data"):
@@ -817,7 +801,7 @@ class ProfessionalNetworkDataClient:
             data = await self._make_request(
                 "GET",
                 "/post",
-                params={"link": post_url},
+                params={"url": post_url},
             )
 
             if data and data.get("data"):
@@ -854,10 +838,9 @@ class ProfessionalNetworkDataClient:
         try:
             data = await self._make_request(
                 "GET",
-                "/post-comments",
+                "/post/comments",
                 params={
-                    "link": post_url,
-                    "sort_by": "Most relevant" if sort_by == "relevance" else "Most recent",
+                    "url": post_url,
                 },
             )
 
@@ -898,8 +881,8 @@ class ProfessionalNetworkDataClient:
         try:
             data = await self._make_request(
                 "GET",
-                "/post-reactions",
-                params={"link": post_url, "type": reaction_type},
+                "/post/reactions",
+                params={"url": post_url},
             )
 
             if data and data.get("data"):
