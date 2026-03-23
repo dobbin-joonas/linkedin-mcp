@@ -902,27 +902,40 @@ class ProfessionalNetworkDataClient:
         post_url = f"https://www.linkedin.com/feed/update/urn:li:activity:{activity_id}"
 
         try:
+            payload_reaction = "" if reaction_type == "ALL" else reaction_type
             data = await self._make_request(
-                "GET",
-                "/post/reactions",
-                params={"url": post_url},
+                "POST",
+                "/get-post-reactions",
+                json_data={
+                    "url": post_url,
+                    "page": 1,
+                    "reactionType": payload_reaction
+                },
             )
 
-            if data and data.get("data"):
-                reactors = data["data"]
+            if data and data.get("data") and data["data"].get("items"):
+                reactors = data["data"]["items"]
+                total = data["data"].get("total", len(reactors))
                 normalized_reactors = []
                 for reactor in reactors[:limit]:
+                    profile_pic = None
+                    pics = reactor.get("profilePicture")
+                    if pics and isinstance(pics, list) and len(pics) > 0:
+                        profile_pic = pics[0].get("url")
+                    elif isinstance(pics, str):
+                        profile_pic = pics
+
                     normalized_reactors.append({
-                        "name": reactor.get("name"),
+                        "name": reactor.get("fullName") or reactor.get("name"),
                         "headline": reactor.get("headline"),
-                        "profile_url": reactor.get("linkedin_url"),
-                        "profile_image": reactor.get("profile_image_url"),
-                        "reaction_type": reactor.get("reaction_type"),
+                        "profile_url": reactor.get("profileUrl") or reactor.get("linkedin_url"),
+                        "profile_image": profile_pic or reactor.get("profile_image_url"),
+                        "reaction_type": reactor.get("reactionType") or reactor.get("reaction_type"),
                     })
 
                 logger.info("Post reactions retrieved", count=len(normalized_reactors))
                 return {
-                    "total_count": len(normalized_reactors),
+                    "total_count": total,
                     "reactors": normalized_reactors,
                     "source": "professional_network_data_api",
                 }
