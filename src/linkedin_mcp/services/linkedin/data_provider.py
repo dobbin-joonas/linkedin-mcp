@@ -521,6 +521,7 @@ class LinkedInDataProvider:
         self,
         post_urn: str,
         limit: int = 50,
+        is_company_post: bool = False,
     ) -> dict[str, Any]:
         """
         Get comments on a LinkedIn post.
@@ -530,6 +531,7 @@ class LinkedInDataProvider:
         Args:
             post_urn: LinkedIn post URN (e.g., "urn:li:activity:123456")
             limit: Maximum comments to return
+            is_company_post: True if the post belongs to a company page
 
         Returns:
             Comments data with source information
@@ -538,6 +540,7 @@ class LinkedInDataProvider:
             "get_post_comments",
             post_urn,
             limit=limit,
+            is_company_post=is_company_post,
         )
 
     # =========================================================================
