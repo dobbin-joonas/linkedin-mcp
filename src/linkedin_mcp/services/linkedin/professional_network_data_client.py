@@ -316,6 +316,11 @@ class ProfessionalNetworkDataClient:
 
             if data and data.get("data"):
                 interests_data = data["data"]
+                if "items" in interests_data:
+                    return {
+                        "groups": interests_data["items"],
+                        "source": "professional_network_data_api",
+                    }
                 return {
                     "influencers": interests_data.get("influencers", []),
                     "companies": interests_data.get("companies", []),
