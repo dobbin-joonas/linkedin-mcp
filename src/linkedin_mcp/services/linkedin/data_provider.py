@@ -651,7 +651,7 @@ class LinkedInDataProvider:
         """
         Search for companies on LinkedIn.
 
-        Uses Fresh Data API (RapidAPI) for comprehensive search.
+        Uses PND API or Fresh Data API (RapidAPI) for comprehensive search.
 
         Args:
             query: Search query (company name or keywords)
@@ -660,7 +660,12 @@ class LinkedInDataProvider:
         Returns:
             Company search results with source information
         """
-        # Try Fresh Data API first (most comprehensive search)
+        # Try PND API first
+        result = await self._try_pnd("search_companies", query, limit=limit)
+        if result:
+            return result
+
+        # Try Fresh Data API
         result = await self._try_fresh_data("search_companies", query, limit=limit)
         if result:
             return result
@@ -751,7 +756,7 @@ class LinkedInDataProvider:
         """
         Advanced profile search with multiple filters.
 
-        Uses Fresh Data API for comprehensive search capabilities.
+        Uses PND API or Fresh Data API for comprehensive search capabilities.
 
         Args:
             query: General search keywords
@@ -767,7 +772,22 @@ class LinkedInDataProvider:
         """
         sources_tried = []
 
-        # Try Fresh Data API first (most comprehensive)
+        # Try PND API first
+        result = await self._try_pnd(
+            "search_profiles",
+            query=query,
+            first_name=first_name,
+            last_name=last_name,
+            title_keywords=title_keywords,
+            company_names=company_names,
+            locations=locations,
+            limit=limit,
+        )
+        if result:
+            return result
+        sources_tried.append("pnd_api")
+
+        # Try Fresh Data API
         result = await self._try_fresh_data(
             "search_profiles",
             query=query,
