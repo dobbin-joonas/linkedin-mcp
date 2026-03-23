@@ -31,7 +31,7 @@ def main() -> None:
         if transport == "stdio":
             mcp.run(transport="stdio")
         else:
-            mcp.run(transport=transport, host=host, port=port, endpoint="/mcp")
+            mcp.run(transport=transport, host=host, port=port)
     except KeyboardInterrupt:
         print("\nServer stopped by user", file=sys.stderr)
         sys.exit(0)
