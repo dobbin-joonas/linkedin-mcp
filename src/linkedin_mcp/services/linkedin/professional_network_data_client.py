@@ -666,7 +666,7 @@ class ProfessionalNetworkDataClient:
             data = await self._make_request(
                 "GET",
                 "/get-user-articles",
-                params={"username": username},
+                params={"username": username, "page": 1},
             )
 
             if data:
@@ -674,7 +674,11 @@ class ProfessionalNetworkDataClient:
                 if isinstance(data, list):
                     articles = data
                 elif isinstance(data, dict):
-                    articles = data.get("data", data.get("articles", []))
+                    data_obj = data.get("data", {})
+                    if isinstance(data_obj, dict) and "items" in data_obj:
+                        articles = data_obj["items"]
+                    else:
+                        articles = data_obj if isinstance(data_obj, list) else data.get("articles", [])
                 else:
                     articles = []
 
@@ -1189,24 +1193,39 @@ class ProfessionalNetworkDataClient:
 
     def _normalize_article(self, data: dict) -> dict[str, Any]:
         """Normalize article data to consistent format (NEW)."""
+        author = data.get("authorProfile", {})
+        social = data.get("totalSocialActivityCounts", {})
+        
+        cover_image = data.get("cover_image") or data.get("image_url")
+        if not cover_image and data.get("images") and isinstance(data.get("images"), list) and len(data["images"]) > 0:
+            cover_image = data["images"][0].get("url")
+            
+        profile_image = data.get("author_image_url")
+        if not profile_image and author.get("profilePicture") and isinstance(author.get("profilePicture"), list) and len(author["profilePicture"]) > 0:
+            profile_image = author["profilePicture"][0].get("url")
+
+        author_name = data.get("author_name")
+        if not author_name and author.get("firstName"):
+            author_name = f"{author.get('firstName', '')} {author.get('lastName', '')}".strip()
+
         return {
-            "id": data.get("article_id") or data.get("id"),
+            "id": data.get("urn") or data.get("article_id") or data.get("id"),
             "title": data.get("title"),
             "subtitle": data.get("subtitle"),
-            "content": data.get("content") or data.get("body"),
+            "content": data.get("contentHTML") or data.get("description") or data.get("content") or data.get("body"),
             "url": data.get("url") or data.get("article_url"),
-            "cover_image": data.get("cover_image") or data.get("image_url"),
+            "cover_image": cover_image,
             "author": {
-                "name": data.get("author_name"),
-                "headline": data.get("author_headline"),
-                "profile_url": data.get("author_linkedin_url"),
-                "profile_image": data.get("author_image_url"),
+                "name": author_name,
+                "headline": author.get("headline") or data.get("author_headline"),
+                "profile_url": author.get("url") or data.get("author_linkedin_url"),
+                "profile_image": profile_image,
             },
             "engagement": {
-                "likes": data.get("num_likes", 0),
-                "comments": data.get("num_comments", 0),
+                "likes": social.get("likeCount") or data.get("num_likes", 0),
+                "comments": social.get("numComments") or data.get("num_comments", 0),
             },
-            "published_at": data.get("published_at") or data.get("time"),
+            "published_at": data.get("publishedAt") or data.get("published_at") or data.get("time"),
             "source": "professional_network_data_api",
         }
 
