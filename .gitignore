@@ -107,3 +107,4 @@ secrets/
 
 # Serena AI tool cache
 .serena/
+.aider*
