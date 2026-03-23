@@ -189,28 +189,31 @@ class ProfessionalNetworkDataClient:
             logger.error("Must provide either linkedin_url or public_id")
             return None
 
-        # Construct URL if only public_id provided
-        if not linkedin_url and public_id:
-            linkedin_url = f"https://www.linkedin.com/in/{public_id}"
+        # Extract username for the new API format
+        username = public_id
+        if not username and linkedin_url:
+            username = linkedin_url.rstrip("/").split("/")[-1]
 
         try:
+            # The API provider changed their endpoint to the root path "/"
             data = await self._make_request(
                 "GET",
-                "/profile",
-                params={"url": linkedin_url},
+                "/",
+                params={"username": username},
             )
 
-            if data and data.get("data"):
-                logger.info("Profile lookup successful", url=linkedin_url)
-                return self._normalize_profile(data["data"])
+            # The new API returns the profile directly at the root of the JSON
+            if data and not data.get("error"):
+                logger.info("Profile lookup successful", username=username)
+                return self._normalize_profile(data)
             else:
-                logger.warning("Profile not found", url=linkedin_url)
+                logger.warning("Profile not found", username=username)
                 return None
 
         except (PermissionError, RuntimeError):
             raise
         except Exception as e:
-            logger.error("Profile lookup error", url=linkedin_url, error=str(e))
+            logger.error("Profile lookup error", username=username, error=str(e))
             return None
 
     async def search_profiles(
@@ -976,33 +979,35 @@ class ProfessionalNetworkDataClient:
 
     def _normalize_profile(self, data: dict) -> dict[str, Any]:
         """Normalize profile data to consistent format."""
+        # Handle both old format and new format (camelCase)
+        first_name = data.get("firstName") or data.get("first_name", "")
+        last_name = data.get("lastName") or data.get("last_name", "")
+        
+        geo = data.get("geo", {})
+        
         return {
-            "id": data.get("profile_id") or data.get("public_id") or data.get("urn", "").split(":")[-1],
-            "public_id": data.get("public_id"),
-            "first_name": data.get("first_name"),
-            "last_name": data.get("last_name"),
-            "full_name": f"{data.get('first_name', '')} {data.get('last_name', '')}".strip() or data.get("name"),
+            "id": data.get("id") or data.get("profile_id") or data.get("urn", "").split(":")[-1],
+            "public_id": data.get("username") or data.get("public_id"),
+            "first_name": first_name,
+            "last_name": last_name,
+            "full_name": f"{first_name} {last_name}".strip() or data.get("name"),
             "headline": data.get("headline"),
-            "summary": data.get("about") or data.get("summary"),
-            "location": data.get("location"),
-            "city": data.get("city"),
-            "country": data.get("country"),
-            "profile_url": data.get("linkedin_url") or data.get("redirected_url"),
-            "profile_image_url": data.get("profile_image_url"),
+            "summary": data.get("summary") or data.get("about"),
+            "location": geo.get("full") or data.get("location"),
+            "city": geo.get("city") or data.get("city"),
+            "country": geo.get("country") or data.get("country"),
+            "profile_url": f"https://www.linkedin.com/in/{data.get('username')}" if data.get("username") else (data.get("linkedin_url") or data.get("redirected_url")),
+            "profile_image_url": data.get("profilePicture") or data.get("profile_image_url"),
             "connection_count": data.get("connection_count"),
             "current_company": data.get("company"),
             "current_title": data.get("job_title") or data.get("headline"),
             "email": data.get("email"),
             "phone": data.get("phone"),
-            "experiences": self._normalize_experiences(data.get("experiences", [])),
+            "experiences": self._normalize_experiences(data.get("position") or data.get("experiences", [])),
             "education": self._normalize_education(data.get("educations", [])),
-            "skills": data.get("skills", []),
+            "skills": [s.get("name") for s in data.get("skills", [])] if data.get("skills") and isinstance(data.get("skills")[0], dict) else data.get("skills", []),
             "languages": data.get("languages"),
-            # NEW fields available in PND API
-            "last_active": data.get("last_active"),
-            "premium": data.get("premium"),
-            "open_to_work": data.get("open_to_work"),
-            "hiring": data.get("hiring"),
+            "premium": data.get("isPremium") or data.get("premium"),
             "source": "professional_network_data_api",
         }
 
@@ -1010,13 +1015,25 @@ class ProfessionalNetworkDataClient:
         """Normalize experience data."""
         normalized = []
         for exp in experiences:
+            # Handle new format (camelCase) and old format
+            start_date = exp.get("start", {})
+            end_date = exp.get("end", {})
+            
+            date_str = ""
+            if start_date.get("year"):
+                date_str = f"{start_date.get('year')}"
+                if end_date.get("year"):
+                    date_str += f" - {end_date.get('year')}"
+                else:
+                    date_str += " - Present"
+                    
             normalized.append({
-                "company": exp.get("company"),
-                "company_id": exp.get("company_id"),
-                "company_url": exp.get("company_linkedin_url"),
-                "company_logo": exp.get("company_logo_url"),
+                "company": exp.get("companyName") or exp.get("company"),
+                "company_id": exp.get("companyId") or exp.get("company_id"),
+                "company_url": exp.get("companyURL") or exp.get("company_linkedin_url"),
+                "company_logo": exp.get("companyLogo") or exp.get("company_logo_url"),
                 "title": exp.get("title"),
-                "date_range": exp.get("date_range"),
+                "date_range": date_str or exp.get("date_range"),
                 "description": exp.get("description"),
                 "location": exp.get("location"),
             })
@@ -1026,15 +1043,18 @@ class ProfessionalNetworkDataClient:
         """Normalize education data."""
         normalized = []
         for edu in education:
+            start_date = edu.get("start", {})
+            end_date = edu.get("end", {})
+            
             normalized.append({
-                "school": edu.get("school"),
-                "school_id": edu.get("school_id"),
-                "school_url": edu.get("school_linkedin_url"),
+                "school": edu.get("schoolName") or edu.get("school"),
+                "school_id": edu.get("schoolId") or edu.get("school_id"),
+                "school_url": edu.get("url") or edu.get("school_linkedin_url"),
                 "degree": edu.get("degree"),
-                "field_of_study": edu.get("field_of_study"),
+                "field_of_study": edu.get("fieldOfStudy") or edu.get("field_of_study"),
                 "date_range": edu.get("date_range"),
-                "start_year": edu.get("start_year"),
-                "end_year": edu.get("end_year"),
+                "start_year": start_date.get("year") or edu.get("start_year"),
+                "end_year": end_date.get("year") or edu.get("end_year"),
                 "activities": edu.get("activities"),
             })
         return normalized
