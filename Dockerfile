@@ -28,8 +28,15 @@ ENV PYTHONUNBUFFERED=1
 ENV LOG_LEVEL=INFO
 ENV LOG_FORMAT=json
 
-# Expose port for HTTP transport (if used)
+# --- RAILWAY WEB SERVER SETTINGS ---
+ENV MCP_TRANSPORT=streamable-http
+ENV MCP_HOST=0.0.0.0
+ENV MCP_PORT=8000
 EXPOSE 8000
 
-# Run the server
-CMD ["uv", "run", "linkedin-mcp"]
+# Create volume links and start the server
+CMD mkdir -p /data/app_data /data/cookies && \
+    rm -rf /app/data /app/cookies && \
+    ln -s /data/app_data /app/data && \
+    ln -s /data/cookies /app/cookies && \
+    uv run linkedin-mcp

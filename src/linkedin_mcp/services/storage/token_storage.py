@@ -12,7 +12,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
-import keyring
 import structlog
 
 logger = structlog.get_logger(__name__)
@@ -89,109 +88,14 @@ class TokenData:
 
 # ==================== Official OAuth Token Storage ====================
 
-
 def store_official_token(token_data: TokenData) -> bool:
-    """
-    Store official OAuth token in system keychain.
-
-    Args:
-        token_data: Token data to store
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        # Store token
-        keyring.set_password(SERVICE_NAME, OFFICIAL_TOKEN_KEY, token_data.access_token)
-
-        # Store metadata
-        metadata = {
-            "expires_at": token_data.expires_at.isoformat(),
-            "scopes": token_data.scopes,
-            "token_type": token_data.token_type,
-            "created_at": token_data.created_at.isoformat() if token_data.created_at else None,
-        }
-        keyring.set_password(SERVICE_NAME, OFFICIAL_METADATA_KEY, json.dumps(metadata))
-
-        logger.info(
-            "Stored official OAuth token in keychain",
-            expires_in_days=token_data.days_until_expiry,
-        )
-        return True
-
-    except Exception as e:
-        logger.error("Failed to store official token", error=str(e))
-        return False
-
+    return True
 
 def get_official_token() -> Optional[TokenData]:
-    """
-    Retrieve official OAuth token from system keychain.
-
-    Returns:
-        TokenData if found and valid, None otherwise
-    """
-    try:
-        access_token = keyring.get_password(SERVICE_NAME, OFFICIAL_TOKEN_KEY)
-        metadata_str = keyring.get_password(SERVICE_NAME, OFFICIAL_METADATA_KEY)
-
-        if not access_token or not metadata_str:
-            logger.debug("No official token found in keychain")
-            return None
-
-        metadata = json.loads(metadata_str)
-
-        token_data = TokenData(
-            access_token=access_token,
-            expires_at=datetime.fromisoformat(metadata["expires_at"]),
-            scopes=metadata.get("scopes", []),
-            token_type=metadata.get("token_type", "Bearer"),
-            created_at=datetime.fromisoformat(metadata["created_at"])
-            if metadata.get("created_at")
-            else None,
-        )
-
-        if token_data.is_expired:
-            logger.warning("Official token has expired")
-            return None
-
-        if token_data.expires_soon:
-            logger.warning(
-                "Official token expires soon",
-                days_remaining=token_data.days_until_expiry,
-            )
-
-        return token_data
-
-    except Exception as e:
-        logger.error("Failed to retrieve official token", error=str(e))
-        return None
-
+    return None
 
 def delete_official_token() -> bool:
-    """
-    Delete official OAuth token from system keychain.
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        try:
-            keyring.delete_password(SERVICE_NAME, OFFICIAL_TOKEN_KEY)
-        except keyring.errors.PasswordDeleteError:
-            pass
-
-        try:
-            keyring.delete_password(SERVICE_NAME, OFFICIAL_METADATA_KEY)
-        except keyring.errors.PasswordDeleteError:
-            pass
-
-        logger.info("Deleted official OAuth token from keychain")
-        return True
-
-    except Exception as e:
-        logger.error("Failed to delete official token", error=str(e))
-        return False
+    return True
 
 
 # ==================== Unofficial Cookie Storage ====================
@@ -248,100 +152,10 @@ class CookieData:
 
 
 def store_unofficial_cookies(cookie_data: CookieData) -> bool:
-    """
-    Store unofficial API cookies in system keychain.
-
-    Args:
-        cookie_data: Cookie data to store
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        # Store li_at cookie (the main one)
-        keyring.set_password(SERVICE_NAME, UNOFFICIAL_COOKIES_KEY, cookie_data.li_at)
-
-        # Store metadata
-        metadata = {
-            "jsessionid": cookie_data.jsessionid,
-            "extracted_at": cookie_data.extracted_at.isoformat()
-            if cookie_data.extracted_at
-            else None,
-            "browser": cookie_data.browser,
-        }
-        keyring.set_password(SERVICE_NAME, UNOFFICIAL_METADATA_KEY, json.dumps(metadata))
-
-        logger.info(
-            "Stored unofficial cookies in keychain",
-            browser=cookie_data.browser,
-        )
-        return True
-
-    except Exception as e:
-        logger.error("Failed to store unofficial cookies", error=str(e))
-        return False
-
+    return True
 
 def get_unofficial_cookies() -> Optional[CookieData]:
-    """
-    Retrieve unofficial API cookies from system keychain.
-
-    Returns:
-        CookieData if found, None otherwise
-    """
-    try:
-        li_at = keyring.get_password(SERVICE_NAME, UNOFFICIAL_COOKIES_KEY)
-        metadata_str = keyring.get_password(SERVICE_NAME, UNOFFICIAL_METADATA_KEY)
-
-        if not li_at:
-            logger.debug("No unofficial cookies found in keychain")
-            return None
-
-        metadata = json.loads(metadata_str) if metadata_str else {}
-
-        cookie_data = CookieData(
-            li_at=li_at,
-            jsessionid=metadata.get("jsessionid"),
-            extracted_at=datetime.fromisoformat(metadata["extracted_at"])
-            if metadata.get("extracted_at")
-            else None,
-            browser=metadata.get("browser"),
-        )
-
-        if cookie_data.is_stale:
-            logger.warning(
-                "Unofficial cookies may be stale",
-                hours_old=cookie_data.hours_since_extraction,
-            )
-
-        return cookie_data
-
-    except Exception as e:
-        logger.error("Failed to retrieve unofficial cookies", error=str(e))
-        return None
-
+    return None
 
 def delete_unofficial_cookies() -> bool:
-    """
-    Delete unofficial API cookies from system keychain.
-
-    Returns:
-        True if successful, False otherwise
-    """
-    try:
-        try:
-            keyring.delete_password(SERVICE_NAME, UNOFFICIAL_COOKIES_KEY)
-        except keyring.errors.PasswordDeleteError:
-            pass
-
-        try:
-            keyring.delete_password(SERVICE_NAME, UNOFFICIAL_METADATA_KEY)
-        except keyring.errors.PasswordDeleteError:
-            pass
-
-        logger.info("Deleted unofficial cookies from keychain")
-        return True
-
-    except Exception as e:
-        logger.error("Failed to delete unofficial cookies", error=str(e))
-        return False
+    return True
