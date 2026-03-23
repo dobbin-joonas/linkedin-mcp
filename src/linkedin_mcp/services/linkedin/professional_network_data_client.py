@@ -749,6 +749,7 @@ class ProfessionalNetworkDataClient:
         self,
         linkedin_url: str | None = None,
         company_id: str | None = None,
+        vanity_name: str | None = None,
         sort_by: str = "recent",
         limit: int = 50,
     ) -> list[dict[str, Any]]:
@@ -758,24 +759,28 @@ class ProfessionalNetworkDataClient:
         Args:
             linkedin_url: Full LinkedIn company URL
             company_id: LinkedIn company ID
+            vanity_name: Company vanity name (URL slug)
             sort_by: "recent" or "top"
             limit: Maximum posts to return
 
         Returns:
             List of post dicts
         """
-        if not linkedin_url and not company_id:
-            logger.error("Must provide either linkedin_url or company_id")
-            return []
+        username = vanity_name
+        if not username and linkedin_url:
+            username = linkedin_url.rstrip("/").split("/")[-1]
+        if not username and company_id:
+            username = str(company_id)
 
-        if not linkedin_url and company_id:
-            linkedin_url = f"https://www.linkedin.com/company/{company_id}"
+        if not username:
+            logger.error("Must provide linkedin_url, company_id, or vanity_name")
+            return []
 
         try:
             data = await self._make_request(
                 "GET",
-                "/company/posts",
-                params={"url": linkedin_url},
+                "/get-company-posts",
+                params={"username": username, "start": 0},
             )
 
             if data and data.get("data"):
