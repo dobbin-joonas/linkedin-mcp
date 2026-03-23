@@ -448,34 +448,35 @@ class ProfessionalNetworkDataClient:
         Returns:
             Company data dict or None on error
         """
-        # Construct URL if needed
-        if not linkedin_url:
-            if vanity_name:
-                linkedin_url = f"https://www.linkedin.com/company/{vanity_name}"
-            elif company_id:
-                linkedin_url = f"https://www.linkedin.com/company/{company_id}"
-            else:
-                logger.error("Must provide linkedin_url, company_id, or vanity_name")
-                return None
+        # Extract username (vanity_name) for the new API format
+        username = vanity_name
+        if not username and linkedin_url:
+            username = linkedin_url.rstrip("/").split("/")[-1]
+        if not username and company_id:
+            username = str(company_id)
+
+        if not username:
+            logger.error("Must provide linkedin_url, company_id, or vanity_name")
+            return None
 
         try:
             data = await self._make_request(
                 "GET",
-                "/company",
-                params={"url": linkedin_url},
+                "/get-company-details",
+                params={"username": username},
             )
 
             if data and data.get("data"):
-                logger.info("Company lookup successful", url=linkedin_url)
+                logger.info("Company lookup successful", username=username)
                 return self._normalize_company(data["data"])
             else:
-                logger.warning("Company not found", url=linkedin_url)
+                logger.warning("Company not found", username=username)
                 return None
 
         except (PermissionError, RuntimeError):
             raise
         except Exception as e:
-            logger.error("Company lookup error", url=linkedin_url, error=str(e))
+            logger.error("Company lookup error", username=username, error=str(e))
             return None
 
     async def search_companies(
@@ -1061,27 +1062,37 @@ class ProfessionalNetworkDataClient:
 
     def _normalize_company(self, data: dict) -> dict[str, Any]:
         """Normalize company data to consistent format."""
+        hq = data.get("headquarter", {})
+        industries = data.get("industries", [])
+        industry = industries[0] if industries else data.get("industry") or data.get("company_industry")
+        
+        founded = data.get("founded", {})
+        founded_year = founded.get("year") if isinstance(founded, dict) else data.get("founded_year") or data.get("company_year_founded")
+
+        images = data.get("Images", {})
+        logo_url = images.get("logo") or data.get("logo_url") or data.get("company_logo_url")
+
         return {
-            "id": data.get("company_id") or data.get("id"),
+            "id": data.get("id") or data.get("company_id"),
             "name": data.get("name") or data.get("company"),
-            "vanity_name": data.get("vanity_name") or data.get("universal_name"),
+            "vanity_name": data.get("universalName") or data.get("vanity_name") or data.get("universal_name"),
             "description": data.get("description") or data.get("company_description"),
             "website": data.get("website") or data.get("company_website"),
             "domain": data.get("company_domain"),
-            "industry": data.get("industry") or data.get("company_industry"),
-            "company_size": data.get("company_size") or data.get("company_employee_range"),
-            "employee_count": data.get("employee_count"),
-            "founded_year": data.get("founded_year") or data.get("company_year_founded"),
+            "industry": industry,
+            "company_size": data.get("staffCountRange") or data.get("company_size") or data.get("company_employee_range"),
+            "employee_count": data.get("staffCount") or data.get("employee_count"),
+            "founded_year": founded_year,
             "headquarters": {
-                "city": data.get("hq_city") or data.get("city"),
-                "country": data.get("hq_country") or data.get("country"),
-                "region": data.get("hq_region") or data.get("state"),
+                "city": hq.get("city") or data.get("hq_city") or data.get("city"),
+                "country": hq.get("country") or data.get("hq_country") or data.get("country"),
+                "region": hq.get("geographicArea") or data.get("hq_region") or data.get("state"),
             },
-            "logo_url": data.get("logo_url") or data.get("company_logo_url"),
-            "linkedin_url": data.get("linkedin_url") or data.get("company_linkedin_url"),
-            "specialties": data.get("specialties", []),
-            "company_type": data.get("company_type"),
-            "follower_count": data.get("follower_count"),
+            "logo_url": logo_url,
+            "linkedin_url": data.get("linkedinUrl") or data.get("linkedin_url") or data.get("company_linkedin_url"),
+            "specialties": data.get("specialities") or data.get("specialties", []),
+            "company_type": data.get("type") or data.get("company_type"),
+            "follower_count": data.get("followerCount") or data.get("follower_count"),
             "source": "professional_network_data_api",
         }
 
