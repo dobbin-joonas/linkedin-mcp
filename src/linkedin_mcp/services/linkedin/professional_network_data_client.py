@@ -254,25 +254,25 @@ class ProfessionalNetworkDataClient:
         # Build search parameters
         search_params: dict[str, Any] = {}
         if query:
-            search_params["keyword"] = query
+            search_params["keywords"] = query
         if first_name:
-            search_params["first_name"] = first_name
+            search_params["firstName"] = first_name
         if last_name:
-            search_params["last_name"] = last_name
+            search_params["lastName"] = last_name
         if title_keywords:
-            search_params["title"] = title_keywords[0] if title_keywords else None
+            search_params["keywordTitle"] = title_keywords[0] if title_keywords else None
         if company_names:
             search_params["company"] = company_names[0] if company_names else None
 
         try:
             data = await self._make_request(
                 "GET",
-                "/search/people",
+                "/search-people",
                 params=search_params,
             )
 
-            if data:
-                results = data.get("data", data.get("leads", []))
+            if data and data.get("data"):
+                results = data["data"].get("items", [])
                 normalized = [self._normalize_profile(p) for p in results[:limit]]
                 logger.info("Profile search completed", count=len(normalized))
                 return normalized
@@ -991,13 +991,13 @@ class ProfessionalNetworkDataClient:
             "public_id": data.get("username") or data.get("public_id"),
             "first_name": first_name,
             "last_name": last_name,
-            "full_name": f"{first_name} {last_name}".strip() or data.get("name"),
+            "full_name": data.get("fullName") or f"{first_name} {last_name}".strip() or data.get("name"),
             "headline": data.get("headline"),
             "summary": data.get("summary") or data.get("about"),
             "location": geo.get("full") or data.get("location"),
             "city": geo.get("city") or data.get("city"),
             "country": geo.get("country") or data.get("country"),
-            "profile_url": f"https://www.linkedin.com/in/{data.get('username')}" if data.get("username") else (data.get("linkedin_url") or data.get("redirected_url")),
+            "profile_url": data.get("profileURL") or (f"https://www.linkedin.com/in/{data.get('username')}" if data.get("username") else (data.get("linkedin_url") or data.get("redirected_url"))),
             "profile_image_url": data.get("profilePicture") or data.get("profile_image_url"),
             "connection_count": data.get("connection_count"),
             "current_company": data.get("company"),
