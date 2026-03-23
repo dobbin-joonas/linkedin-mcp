@@ -500,17 +500,26 @@ class ProfessionalNetworkDataClient:
         Returns:
             List of company dicts
         """
-        search_params: dict[str, Any] = {"keyword": query}
+        search_params: dict[str, Any] = {
+            "keyword": query,
+            "page": 1
+        }
+        if industries:
+            search_params["industries"] = [str(i) for i in industries]
+        if company_sizes:
+            search_params["companySizes"] = company_sizes
+        if locations:
+            search_params["locations"] = [str(loc) for loc in locations]
 
         try:
             data = await self._make_request(
-                "GET",
-                "/search/companies",
-                params=search_params,
+                "POST",
+                "/companies/search",
+                json_data=search_params,
             )
 
-            if data:
-                companies = data.get("data", data.get("companies", []))
+            if data and data.get("data"):
+                companies = data["data"].get("items", [])
                 results = [self._normalize_company(c) for c in companies[:limit]]
                 logger.info("Company search completed", count=len(results))
                 return results
@@ -711,11 +720,16 @@ class ProfessionalNetworkDataClient:
         if not linkedin_url and public_id:
             linkedin_url = f"https://www.linkedin.com/in/{public_id}"
 
+        # Extract username for the new API format
+        username = public_id
+        if not username and linkedin_url:
+            username = linkedin_url.rstrip("/").split("/")[-1]
+
         try:
             data = await self._make_request(
                 "GET",
-                "/profile/posts",
-                params={"url": linkedin_url},
+                "/get-profile-posts",
+                params={"username": username, "start": 0},
             )
 
             if data and data.get("data"):
@@ -1098,27 +1112,41 @@ class ProfessionalNetworkDataClient:
 
     def _normalize_post(self, data: dict) -> dict[str, Any]:
         """Normalize post data to consistent format."""
+        author = data.get("author", {})
+        author_name = f"{author.get('firstName', '')} {author.get('lastName', '')}".strip()
+        
+        # Handle images
+        images = []
+        if data.get("images") and isinstance(data.get("images"), list):
+            for img_group in data.get("images"):
+                if isinstance(img_group, list) and len(img_group) > 0:
+                    # Get the highest res image from the group
+                    images.append(img_group[0].get("url"))
+        elif data.get("image") and isinstance(data.get("image"), list):
+            if len(data.get("image")) > 0:
+                images.append(data.get("image")[0].get("url"))
+
         return {
             "urn": data.get("urn") or data.get("post_urn"),
             "text": data.get("text") or data.get("commentary"),
-            "post_url": data.get("post_url") or data.get("url"),
+            "post_url": data.get("postUrl") or data.get("post_url") or data.get("url"),
             "author": {
-                "name": data.get("poster_name") or data.get("author_name"),
-                "headline": data.get("poster_headline") or data.get("author_headline"),
-                "profile_url": data.get("poster_linkedin_url") or data.get("author_url"),
-                "profile_image": data.get("poster_image_url") or data.get("author_image"),
+                "name": author_name or data.get("poster_name") or data.get("author_name"),
+                "headline": author.get("headline") or data.get("poster_headline") or data.get("author_headline"),
+                "profile_url": author.get("url") or data.get("poster_linkedin_url") or data.get("author_url"),
+                "profile_image": author.get("profilePictures", [{}])[0].get("url") if author.get("profilePictures") else (data.get("poster_image_url") or data.get("author_image")),
             },
             "engagement": {
-                "likes": data.get("num_likes", 0),
-                "comments": data.get("num_comments", 0),
-                "reposts": data.get("num_reposts", 0),
+                "likes": data.get("likeCount") or data.get("num_likes", 0),
+                "comments": data.get("commentsCount") or data.get("num_comments", 0),
+                "reposts": data.get("repostsCount") or data.get("num_reposts", 0),
             },
             "media": {
-                "images": data.get("images", []),
+                "images": images,
                 "video": data.get("video"),
                 "document": data.get("document"),
             },
-            "posted_at": data.get("time") or data.get("posted_at"),
+            "posted_at": data.get("postedDate") or data.get("time") or data.get("posted_at"),
             "source": "professional_network_data_api",
         }
 
