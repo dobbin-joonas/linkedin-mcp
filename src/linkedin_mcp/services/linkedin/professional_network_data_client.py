@@ -506,8 +506,8 @@ class ProfessionalNetworkDataClient:
             List of company dicts
         """
         search_params: dict[str, Any] = {
-            "keyword": query,
-            "page": 1
+            "keywords": query,
+            "start": 0
         }
         if industries:
             search_params["industries"] = [str(i) for i in industries]
@@ -518,16 +518,29 @@ class ProfessionalNetworkDataClient:
 
         try:
             data = await self._make_request(
-                "POST",
-                "/companies/search",
-                json_data=search_params,
+                "GET",
+                "/search-companies",
+                params=search_params,
             )
 
-            if data and data.get("data"):
-                companies = data["data"].get("items", [])
-                results = [self._normalize_company(c) for c in companies[:limit]]
-                logger.info("Company search completed", count=len(results))
-                return results
+            if data:
+                if isinstance(data, list):
+                    companies = data
+                elif isinstance(data, dict):
+                    data_obj = data.get("data", data)
+                    if isinstance(data_obj, dict) and "items" in data_obj:
+                        companies = data_obj["items"]
+                    elif isinstance(data_obj, list):
+                        companies = data_obj
+                    else:
+                        companies = data.get("items", [])
+                else:
+                    companies = []
+
+                if companies:
+                    results = [self._normalize_company(c) for c in companies[:limit]]
+                    logger.info("Company search completed", count=len(results))
+                    return results
             return []
 
         except (PermissionError, RuntimeError):
@@ -1021,33 +1034,39 @@ class ProfessionalNetworkDataClient:
 
     def _normalize_profile(self, data: dict) -> dict[str, Any]:
         """Normalize profile data to consistent format."""
-        # Handle both old format and new format (camelCase)
-        first_name = data.get("firstName") or data.get("first_name", "")
-        last_name = data.get("lastName") or data.get("last_name", "")
+        if not isinstance(data, dict):
+            return {}
+            
+        first_name = data.get("firstName") or data.get("first_name") or ""
+        last_name = data.get("lastName") or data.get("last_name") or ""
         
-        geo = data.get("geo", {})
+        geo = data.get("geo") or {}
+        urn = data.get("urn") or ""
+        
+        skills_data = data.get("skills") or []
+        skills = [s.get("name") for s in skills_data if isinstance(s, dict)] if skills_data and isinstance(skills_data[0], dict) else skills_data
         
         return {
-            "id": data.get("id") or data.get("profile_id") or data.get("urn", "").split(":")[-1],
+            "id": data.get("id") or data.get("profile_id") or (urn.split(":")[-1] if urn else ""),
             "public_id": data.get("username") or data.get("public_id"),
             "first_name": first_name,
             "last_name": last_name,
             "full_name": data.get("fullName") or f"{first_name} {last_name}".strip() or data.get("name"),
             "headline": data.get("headline"),
             "summary": data.get("summary") or data.get("about"),
-            "location": geo.get("full") or data.get("location"),
-            "city": geo.get("city") or data.get("city"),
-            "country": geo.get("country") or data.get("country"),
-            "profile_url": data.get("profileURL") or (f"https://www.linkedin.com/in/{data.get('username')}" if data.get("username") else (data.get("linkedin_url") or data.get("redirected_url"))),
+            "location": geo.get("full") if isinstance(geo, dict) else data.get("location"),
+            "city": geo.get("city") if isinstance(geo, dict) else data.get("city"),
+            "country": geo.get("country") if isinstance(geo, dict) else data.get("country"),
+            "profile_url": data.get("profileURL") or data.get("profileUrl") or (f"https://www.linkedin.com/in/{data.get('username')}" if data.get("username") else (data.get("linkedin_url") or data.get("redirected_url"))),
             "profile_image_url": data.get("profilePicture") or data.get("profile_image_url"),
             "connection_count": data.get("connection_count"),
             "current_company": data.get("company"),
             "current_title": data.get("job_title") or data.get("headline"),
             "email": data.get("email"),
             "phone": data.get("phone"),
-            "experiences": self._normalize_experiences(data.get("position") or data.get("experiences", [])),
-            "education": self._normalize_education(data.get("educations", [])),
-            "skills": [s.get("name") for s in data.get("skills", [])] if data.get("skills") and isinstance(data.get("skills")[0], dict) else data.get("skills", []),
+            "experiences": self._normalize_experiences(data.get("position") or data.get("experiences") or []),
+            "education": self._normalize_education(data.get("educations") or []),
+            "skills": skills,
             "languages": data.get("languages"),
             "premium": data.get("isPremium") or data.get("premium"),
             "source": "professional_network_data_api",
@@ -1103,15 +1122,19 @@ class ProfessionalNetworkDataClient:
 
     def _normalize_company(self, data: dict) -> dict[str, Any]:
         """Normalize company data to consistent format."""
-        hq = data.get("headquarter", {})
-        industries = data.get("industries", [])
+        if not isinstance(data, dict):
+            return {}
+            
+        hq = data.get("headquarter") or {}
+        industries = data.get("industries") or []
         industry = industries[0] if industries else data.get("industry") or data.get("company_industry")
         
-        founded = data.get("founded", {})
+        founded = data.get("founded") or {}
         founded_year = founded.get("year") if isinstance(founded, dict) else data.get("founded_year") or data.get("company_year_founded")
 
-        images = data.get("Images", {})
-        logo_url = images.get("logo") or data.get("logo_url") or data.get("company_logo_url")
+        images = data.get("Images") or {}
+        logo_url = images.get("logo") if isinstance(images, dict) else None
+        logo_url = logo_url or data.get("logo_url") or data.get("company_logo_url")
 
         return {
             "id": data.get("id") or data.get("company_id"),
@@ -1125,13 +1148,13 @@ class ProfessionalNetworkDataClient:
             "employee_count": data.get("staffCount") or data.get("employee_count"),
             "founded_year": founded_year,
             "headquarters": {
-                "city": hq.get("city") or data.get("hq_city") or data.get("city"),
-                "country": hq.get("country") or data.get("hq_country") or data.get("country"),
-                "region": hq.get("geographicArea") or data.get("hq_region") or data.get("state"),
+                "city": hq.get("city") if isinstance(hq, dict) else data.get("hq_city") or data.get("city"),
+                "country": hq.get("country") if isinstance(hq, dict) else data.get("hq_country") or data.get("country"),
+                "region": hq.get("geographicArea") if isinstance(hq, dict) else data.get("hq_region") or data.get("state"),
             },
             "logo_url": logo_url,
             "linkedin_url": data.get("linkedinUrl") or data.get("linkedin_url") or data.get("company_linkedin_url"),
-            "specialties": data.get("specialities") or data.get("specialties", []),
+            "specialties": data.get("specialities") or data.get("specialties") or [],
             "company_type": data.get("type") or data.get("company_type"),
             "follower_count": data.get("followerCount") or data.get("follower_count"),
             "source": "professional_network_data_api",
